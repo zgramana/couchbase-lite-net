@@ -50,6 +50,7 @@ using System.Linq;
 using Couchbase.Lite.Util;
 using System.Diagnostics;
 using System.Threading;
+using FluentAssertions;
 
 namespace Couchbase.Lite
 {
@@ -58,6 +59,88 @@ namespace Couchbase.Lite
     {
 
         public DocumentTest(string storageType) : base(storageType) {}
+
+        [Test]
+        public void TestResolveConflictInChangeHandler()
+        {
+            var properties = new Dictionary<string, object> {
+                ["foo"] = "bar"
+            };
+
+            var doc = database.CreateDocument();
+            var rev1 = doc.CreateRevision();
+            rev1.SetUserProperties(properties);
+            var rev1Saved = rev1.Save();
+
+            var rev2a = rev1Saved.CreateRevision();
+            properties["what"] = "rev2a";
+            rev2a.SetUserProperties(properties);
+            var rev2aSaved = rev2a.Save(true);
+
+            var rev2b = rev1Saved.CreateRevision();
+            properties["what"] = "rev2b";
+            rev2b.SetUserProperties(properties);
+            var rev2bSaved = rev2b.Save(true);
+
+            var countdown = new CountdownEvent(2);
+            var exception = default(Exception);
+            database.Changed += (sender, args) =>
+            {
+                WriteDebug($"Changed event={args}");
+                countdown.Signal();
+                try {
+                    var changes = args.Changes;
+                    WriteDebug($"Got changes: {0}", new LogJsonString(changes));
+                    var conflictCount = 0;
+                    foreach(var change in changes) {
+                        WriteDebug($"Change is in conflict: {change.IsConflict}");
+                        if(change.IsConflict) {
+                            conflictCount++;
+                            var document = database.GetDocument(change.DocumentId);
+                            var conflictingRevs = document.ConflictingRevisions?.ToList();
+                            if(conflictingRevs != null && conflictingRevs.Count > 1) {
+                                database.RunInTransaction(() =>
+                                {
+                                    foreach(var conflictingRev in conflictingRevs) {
+                                        var newRevision = conflictingRev.CreateRevision();
+                                        if(!conflictingRev.Equals(document.CurrentRevision)) {
+                                            newRevision.IsDeletion = true;
+                                        }
+
+                                        WriteDebug($"New revision: {newRevision.Save(true)}");
+                                    }
+
+                                    return true;
+                                });
+                            }
+                        }
+                    }
+
+                    WriteDebug($"Conflicts in document change: {conflictCount}");
+                    if(countdown.CurrentCount == 1) {
+                        conflictCount.Should().Be(1, "because there are no conflicts (only current revision is shown)");
+                    } else if(countdown.CurrentCount == 0) {
+                        conflictCount.Should().Be(2, "because there should be a conflict");
+                    }
+                } catch(Exception e) {
+                    Console.WriteLine($"Conflict resolution failed: {e}");
+                    exception = e;
+                }
+            };
+
+            var rev2c = rev1Saved.CreateRevision();
+            properties["what"] = "rev2c";
+            rev2c.SetUserProperties(properties);
+            var rev2cSaved = rev2c.Save(true);
+
+            countdown.Wait(100000).Should().BeTrue("beacuse the changed event should happen twice");
+            if(exception != null) {
+                throw exception;
+            }
+
+            countdown.Reset(1);
+            countdown.Wait(1000).Should().BeFalse("because no more changed events should fire");
+        }
 
         [Test]
         public void TestExpireDocument()
