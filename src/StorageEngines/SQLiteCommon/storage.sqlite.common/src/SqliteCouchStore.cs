@@ -716,7 +716,7 @@ namespace Couchbase.Lite.Storage.SQLCipher
             return row;
         }
 
-        private RevisionID GetWinner(long docNumericId, RevisionID oldWinnerRevId, bool oldWinnerWasDeletion, RevisionInternal newRev)
+        private RevisionID GetWinner(long docNumericId, RevisionID oldWinnerRevId, bool oldWinnerWasDeletion, RevisionInternal newRev, ValueTypePtr<bool> outIsConflict)
         {
             var newRevID = newRev.RevID;
             if (oldWinnerRevId == null) {
@@ -734,7 +734,7 @@ namespace Couchbase.Lite.Storage.SQLCipher
             } else {
                 // Doc was alive. How does this deletion affect the winning rev ID?
                 ValueTypePtr<bool> deleted = false;
-                var winningRevId = GetWinner(docNumericId, deleted, ValueTypePtr<bool>.NULL);
+                var winningRevId = GetWinner(docNumericId, deleted, outIsConflict);
                 if (winningRevId != oldWinnerRevId) {
                     return winningRevId;
                 }
@@ -1800,7 +1800,13 @@ namespace Couchbase.Lite.Storage.SQLCipher
                 }
 
                 // Figure out what the new winning rev ID is:
-                winningRevID = GetWinner(docNumericId, oldWinningRevId, oldWinnerWasDeletion, newRev);
+                winningRevID = GetWinner(docNumericId, oldWinningRevId, oldWinnerWasDeletion, newRev, deleting ? wasConflicted : null);
+
+                // Note: In case of deleting and previously conflicting, there is possiblity
+                // no longer conflicted. Need to re-check if it is still conflicted.
+                if(deleting) {
+                    inConflict = inConflict && wasConflicted;
+                }
 
                 // Success!
                 return true;
@@ -2001,7 +2007,7 @@ namespace Couchbase.Lite.Storage.SQLCipher
                 }
 
                 // Figure out what the new winning rev ID is:
-                winningRevId = GetWinner(docNumericId, oldWinningRevId, oldWinnerWasDeletion, rev);
+                winningRevId = GetWinner(docNumericId, oldWinningRevId, oldWinnerWasDeletion, rev, null);
                 return true;
             });
                 
