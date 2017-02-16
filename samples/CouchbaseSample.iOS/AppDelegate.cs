@@ -22,7 +22,7 @@ namespace CouchbaseSample
 
         }
 
-        private static readonly Uri ServerDbUrl = new Uri ("http://us-west.testfest.couchbasemobile.com:4984/grocery-sync/");
+        private static readonly Uri ServerDbUrl = new Uri ("http://ec2-52-202-102-42.compute-1.amazonaws.com:4984/grocery-sync/");
         private const string LocalDocId = "user";
         private const string DatabaseName = "grocery-sync";
 

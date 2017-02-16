@@ -9,10 +9,12 @@
     <RootNamespace>storage.systemsqlite.ios</RootNamespace>
     <IPhoneResourcePrefix>Resources</IPhoneResourcePrefix>
     <AssemblyName>Couchbase.Lite.Storage.SystemSQLite</AssemblyName>
-    <ReleaseVersion>1.1.1</ReleaseVersion>
+    <ReleaseVersion>0.9.2</ReleaseVersion>
     <RestorePackages>true</RestorePackages>
     <NuGetPackageImportStamp>
     </NuGetPackageImportStamp>
+    <ProductVersion>8.0.30703</ProductVersion>
+    <SchemaVersion>2.0</SchemaVersion>
   </PropertyGroup>
   <PropertyGroup Condition=" '$(Configuration)|$(Platform)' == 'Debug|AnyCPU' ">
     <DebugSymbols>true</DebugSymbols>

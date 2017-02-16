@@ -11,5 +11,5 @@
 
   <!-- Server Client ID.  This should be a valid Web OAuth 2.0 Client ID obtained
          from https://console.developers.google.com/ -->
-  <string name="server_client_id">31919031332-8ea1795ckkphb7hmg6i4ul0blcpq8oq5.apps.googleusercontent.com</string>
+  <string name="server_client_id">279085463427-6bhlf1ptmh8b5mtepnr8chdleami4u4e.apps.googleusercontent.com</string>
 </resources>

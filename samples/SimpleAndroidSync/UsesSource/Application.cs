@@ -25,7 +25,7 @@ namespace CouchbaseSample.Android
 
         private const string DatabaseName = "grocery-sync";
         private const string UserLocalDocId = "user";
-        private const string ServerDbUrl = "http://us-west.testfest.couchbasemobile.com:4984/grocery-sync";
+        private const string ServerDbUrl = "http://ec2-52-202-102-42.compute-1.amazonaws.com:4984/grocery-sync/";
 
         private readonly OkHttpClient _httpClient = new OkHttpClient();
 
@@ -318,7 +318,6 @@ namespace CouchbaseSample.Android
         public override void OnCreate()
         {
             base.OnCreate();
-            Couchbase.Lite.Storage.SQLCipher.Plugin.Register();
             InitializeDatabase();
         }
     }

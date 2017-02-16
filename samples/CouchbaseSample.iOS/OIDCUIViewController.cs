@@ -46,6 +46,7 @@ namespace CouchbaseSample
         {
             var rootView = new UIView (new CGRect (0, 0, 200, 200));
             _webView = new WKWebView (rootView.Bounds, new WKWebViewConfiguration ());
+            _webView.CustomUserAgent = "Mozilla/5.0 (iPhone; CPU iPhone OS 9_0 like Mac OS X) AppleWebKit/601.1.32 (KHTML, like Gecko) Mobile/13A4254v";
             _webView.AutoresizingMask = UIViewAutoresizing.FlexibleWidth | UIViewAutoresizing.FlexibleHeight;
             _webView.NavigationDelegate = new OIDCNavigationDelegate (_controller);
             rootView.AddSubview (_webView);
