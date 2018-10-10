@@ -172,6 +172,7 @@ namespace LiteCore.Interop
     {
         public static object ToObject(FLValue* value)
         {
+            int cnt = 0;
             if (value == null) {
                 return null;
             }
@@ -202,13 +203,15 @@ namespace LiteCore.Interop
                 {
                     var dict = Native.FLValue_AsDict(value);
                     var count = (int) Native.FLDict_Count(dict);
-                    var retVal = new Dictionary<string, object>(count);
+                    cnt = count;
                     if (count == 0) {
-                        return retVal;
+                        return new Dictionary<string, object>();
                     }
 
                     FLDictIterator i;
                     Native.FLDictIterator_Begin(dict, &i);
+
+                    var retVal = new Dictionary<string, object>(cnt);
                     do {
                         var rawKey = Native.FLDictIterator_GetKey(&i);
                         string key = Native.FLValue_AsString(rawKey);
