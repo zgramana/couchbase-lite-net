@@ -18,22 +18,16 @@
 
 using System;
 using System.Collections.Generic;
-using System.IO;
 using System.Linq;
 using System.Net.Sockets;
-using System.Security.Cryptography.X509Certificates;
-using System.Text;
 using System.Threading;
 using System.Threading.Tasks;
 using Couchbase.Lite;
-using Couchbase.Lite.Logging;
 
 using Couchbase.Lite.Sync;
 using Couchbase.Lite.Util;
 
 using FluentAssertions;
-using LiteCore;
-using LiteCore.Interop;
 
 using Newtonsoft.Json;
 
@@ -46,6 +40,7 @@ using ProtocolType = Couchbase.Lite.P2P.ProtocolType;
 #if !WINDOWS_UWP
 using Xunit;
 using Xunit.Abstractions;
+using System.Collections.Immutable;
 #else
 using Fact = Microsoft.VisualStudio.TestTools.UnitTesting.TestMethodAttribute;
 #endif
@@ -1614,6 +1609,271 @@ namespace Test
             });
 
             TestConflictResolverExceptionThrown(blobFromOtherDbResolver, false, true);
+        }
+
+        [Fact]
+        public void TestPendingDocIDsPullOnlyException()
+        {
+            var config = CreateConfig(false, true, false);
+            using (var repl = new Replicator(config)) {
+                config = repl.Config;
+                Action badAction = (() => {
+                        var ids = repl.GetPendingDocumentIDs();
+                        repl.Start();
+                    });
+                badAction.Should().Throw<CouchbaseLiteException>(CouchbaseLiteErrorMessage.PullOnlyPendingDocIDs);
+            }
+        }
+
+        [Fact]
+        public void TestIsDocumentPendingPullOnlyException()
+        {
+            var config = CreateConfig(false, true, false);
+            using (var repl = new Replicator(config)) {
+                config = repl.Config;
+                Action badAction = (() => {
+                    var ids = repl.IsDocumentPending("doc1");
+                    repl.Start();
+                });
+                badAction.Should().Throw<CouchbaseLiteException>(CouchbaseLiteErrorMessage.PullOnlyPendingDocIDs);
+            }
+        }
+
+        [Fact]
+        public void TestIsDocumentPendingNullIdException()
+        {
+            var config = CreateConfig(true, false, false);
+            using (var repl = new Replicator(config)) {
+                config = repl.Config;
+                Action badAction = (() => {
+                    var ids = repl.IsDocumentPending(null);
+                    repl.Start();
+                });
+                badAction.Should().Throw<ArgumentNullException>();
+            }
+        }
+
+        [Fact]
+        public void TestPendingDocIDs()
+        {
+            IImmutableSet<string> ids;
+            LoadJSONResource("names_100");
+
+            var config = CreateConfig(true, false, false);
+
+            Misc.SafeSwap(ref _repl, new Replicator(config));
+            _waitAssert = new WaitAssert();
+
+            var token = _repl.AddChangeListener((sender, args) =>
+            {
+                _waitAssert.RunConditionalAssert(() =>
+                {
+                    return args.Status.Activity == ReplicatorActivityLevel.Stopped;
+                });
+            });
+
+            ids = _repl.GetPendingDocumentIDs();
+            ids.Count.Should().Be(100);
+
+            _repl.Start();
+
+            try {
+                _waitAssert.WaitForResult(TimeSpan.FromSeconds(10));
+                ids = _repl.GetPendingDocumentIDs();
+                ids.Count.Should().Be(0);
+            } catch {
+                _repl.Stop();
+                throw;
+            } finally {
+                _repl.RemoveChangeListener(token);
+            }
+        }
+
+        [Fact]
+        public void TestPendingDocIDsWithEdit()
+        {
+            IImmutableSet<string> ids;
+            LoadJSONResource("names_100");
+
+            using (var doc = Db.GetDocument("doc-011"))
+            using(var d = doc.ToMutable()) {
+                d.SetBoolean("Edited", true);
+                Db.Save(d);
+            }
+
+            var config = CreateConfig(true, false, false);
+
+            Misc.SafeSwap(ref _repl, new Replicator(config));
+            _waitAssert = new WaitAssert();
+
+            var token = _repl.AddChangeListener((sender, args) =>
+            {
+                _waitAssert.RunConditionalAssert(() =>
+                {
+                    return args.Status.Activity == ReplicatorActivityLevel.Stopped;
+                });
+            });
+
+            ids = _repl.GetPendingDocumentIDs();
+            ids.Count.Should().Be(100);
+            ids.Contains("doc-011").Should().BeTrue();
+
+            _repl.Start();
+
+            try {
+                _waitAssert.WaitForResult(TimeSpan.FromSeconds(10));
+                ids = _repl.GetPendingDocumentIDs();
+                ids.Count.Should().Be(0);
+            } catch {
+                _repl.Stop();
+                throw;
+            } finally {
+                _repl.RemoveChangeListener(token);
+            }
+        }
+
+        [Fact]
+        public void TestPendingDocIDsWithPurge()
+        {
+            IImmutableSet<string> ids;
+            LoadJSONResource("names_100");
+
+            using (var doc = Db.GetDocument("doc-011")){
+                Db.Purge(doc);
+            }
+
+            var config = CreateConfig(true, false, false);
+
+            Misc.SafeSwap(ref _repl, new Replicator(config));
+            _waitAssert = new WaitAssert();
+
+            var token = _repl.AddChangeListener((sender, args) =>
+            {
+                _waitAssert.RunConditionalAssert(() =>
+                {
+                    return args.Status.Activity == ReplicatorActivityLevel.Stopped;
+                });
+            });
+
+            
+
+            ids = _repl.GetPendingDocumentIDs();
+            ids.Count.Should().Be(99);
+            ids.Contains("doc-011").Should().BeFalse();
+
+            _repl.Start();
+
+            try {
+                _waitAssert.WaitForResult(TimeSpan.FromSeconds(10));
+                ids = _repl.GetPendingDocumentIDs();
+                ids.Count.Should().Be(0);
+            } catch {
+                _repl.Stop();
+                throw;
+            } finally {
+                _repl.RemoveChangeListener(token);
+            }
+        }
+
+        [Fact]
+        public void TestIsDocumentPending()
+        {
+            bool isPending = false;
+            LoadJSONResource("names_100");
+
+            var config = CreateConfig(true, false, false);
+
+            Misc.SafeSwap(ref _repl, new Replicator(config));
+            _waitAssert = new WaitAssert();
+            var _waitAssert1 = new WaitAssert();
+            var token = _repl.AddChangeListener((sender, args) =>
+            {
+                _waitAssert1.RunConditionalAssert(() =>
+                {
+                    return args.Status.Activity == ReplicatorActivityLevel.Connecting;
+                });
+                _waitAssert.RunConditionalAssert(() =>
+                {
+                    return args.Status.Activity == ReplicatorActivityLevel.Stopped;
+                });
+            });
+
+            _waitAssert1.WaitForResult(TimeSpan.FromSeconds(10));
+            isPending = _repl.IsDocumentPending("doc-011");
+            isPending.Should().Be(true);
+
+            _repl.Start();
+
+            try {
+                _waitAssert.WaitForResult(TimeSpan.FromSeconds(10));
+                isPending = _repl.IsDocumentPending("doc-011");
+                isPending.Should().Be(false);
+            } catch {
+                _repl.Stop();
+                throw;
+            } finally {
+                _repl.RemoveChangeListener(token);
+            }
+        }
+
+        [Fact]
+        public void TestIsDocumentPendingEdit()
+        {
+            bool isPending = false;
+            LoadJSONResource("names_100");
+
+            using (var doc = Db.GetDocument("doc-011"))
+            using (var d = doc.ToMutable()) {
+                d.SetBoolean("Edited", true);
+                Db.Save(d);
+            }
+
+            var config = CreateConfig(true, false, false);
+
+            Misc.SafeSwap(ref _repl, new Replicator(config));
+            _waitAssert = new WaitAssert();
+
+            var token = _repl.AddChangeListener((sender, args) =>
+            {
+                _waitAssert.RunConditionalAssert(() =>
+                {
+                    return args.Status.Activity == ReplicatorActivityLevel.Stopped;
+                });
+            });
+
+            isPending = _repl.IsDocumentPending("doc-011");
+            isPending.Should().Be(true);
+
+            _repl.Start();
+
+            try {
+                _waitAssert.WaitForResult(TimeSpan.FromSeconds(10));
+                isPending = _repl.IsDocumentPending("doc-011");
+                isPending.Should().Be(false);
+            } catch {
+                _repl.Stop();
+                throw;
+            } finally {
+                _repl.RemoveChangeListener(token);
+            }
+        }
+
+        [Fact]
+        public void TestIsDocumentPendingPurge()
+        {
+            bool isPending = false;
+            LoadJSONResource("names_100");
+
+            using (var doc = Db.GetDocument("doc-011")) {
+                Db.Purge(doc);
+            }
+
+            var config = CreateConfig(true, false, false);
+
+            Misc.SafeSwap(ref _repl, new Replicator(config));
+
+            isPending = _repl.IsDocumentPending("doc-011");
+            isPending.Should().Be(false);
         }
 
         private void TestConflictResolverExceptionThrown(TestConflictResolver resolver, bool continueWithWorkingResolver = false, bool withBlob = false)
